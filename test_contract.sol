@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.0;
 
-
 // Amended by HashLips
 /**
     !Disclaimer!
@@ -18,8 +17,6 @@ pragma solidity ^0.8.0;
     using the code for your own project.
 */
 
-pragma solidity >=0.7.0 <0.9.0;
-
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
@@ -28,7 +25,6 @@ import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
 import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
-pragma solidity >=0.7.0 <0.9.0;
 
 contract Dailys is
     ERC721Enumerable,
@@ -38,6 +34,8 @@ contract Dailys is
 {
     mapping(string => bool) private takenNames;
     mapping(uint256 => Attr) public attributes;
+    mapping(string => stopColors) public sC;
+    mapping(string => Sunsets) public colors;
 
     struct Attr {
         string DayNumber;
@@ -54,13 +52,12 @@ contract Dailys is
         string imageNameB;
     }
     // SUNSET parameters
-    struct Ball {
-        uint256 x; // x coordinates of the top left corner
-        uint256 y; // y coordinates of the top left corner
-        uint256 width;
-        uint256 height;
-        string fill; // ball color
-        uint256 randomBase;
+    struct Sunsets {
+        string stopColor1; // ball color
+        string stopColor2; // ball color
+        string stopColor3; // ball color
+        string stopColor4; // ball color
+        string stopColor5; // ball color
     }
     // Events
     event BallsCreated(uint256 indexed tokenId);
@@ -68,8 +65,6 @@ contract Dailys is
     using Strings for uint256;
 
     string public svgToImage;
-    string public highImageURI;
-    string public lowImageURI;
     string public ImageURI;
     string public auctionURI;
     string public auctionName;
@@ -114,8 +109,6 @@ contract Dailys is
      */
     uint256 public interval;
     uint256 public lastTimeStamp;
-
-
 
     constructor(
         string memory _name,
@@ -194,27 +187,8 @@ contract Dailys is
             imageRand = randMod(randomRange);
             if (count <= 1) {
                 uint256 supply = totalSupply();
-                uint256 tokenId = supply + 1;
-                switchPoint = randMod(randomRange);
-                durationRand1 = randMod(333);
-                durationRand2 = randMod(666);
-                durationRand3 = randMod(999);
-                rand = randMod(33);
-                attributes[tokenId] = Attr(
-                    uint2str(counter),
-                    buildName(tokenId),
-                    count,
-                    rand,
-                    switchOn,
-                    switchPoint,
-                    svgOn,
-                    svgToImageURI(getSvg()),
-                    auctionURI,
-                    auctionName,
-                    stagingURI,
-                    stagingName
-                );
-                _safeMint(ownerAddress, supply + 1);
+                _generateOnMint(supply);
+                _safeMint(ownerAddress, supply);
             } else {
                 count = 1;
             }
@@ -244,14 +218,16 @@ contract Dailys is
         internal
         view
         virtual
-//        override
-        returns (string memory)
+        returns (
+            //        override
+            string memory
+        )
     {
         return auctionURI;
     }
 
-    function randMod(uint256 _modulus) internal returns (uint256) {
-        randNonce++;
+    function randMod(uint256 _modulus) internal view returns (uint256) {
+        //randNonce++;
         return
             uint256(
                 keccak256(
@@ -259,7 +235,7 @@ contract Dailys is
                         block.timestamp,
                         block.difficulty,
                         msg.sender,
-                        randNonce
+                        randNonce + 1
                     )
                 )
             ) % _modulus;
@@ -284,68 +260,60 @@ contract Dailys is
     }
 
     // public
-    function mint(uint256 _mintAmount) public payable {
+    function mint() public payable {
         uint256 supply = totalSupply();
-        require(!paused);
-        require(_mintAmount > 0);
-        require(_mintAmount <= maxMintAmount);
-        require(supply + _mintAmount <= maxSupply);
-        uint256 tokenId = supply + _mintAmount;
+        require(!paused, "CONTRACT_IS_PAUSED");
+        require(supply <= maxSupply, "YOU_CAN_NOT_MINT_MORE_THAN_SUPPLY");
+        if (msg.sender != owner()) {
+            require(msg.value >= cost, "YOU_SEND_THE_WRONG_VALUE");
+        }
+        
+        _generateOnMint(supply);
+        if (block.timestamp >= startingTime + auctionDuration) _resetCost();
+        else {
+            _safeMint(msg.sender, supply);
+
+            cost = (cost * costMultiplier) / 10000000000000000;
+            cost = cost * 1000000000000;
+            count += 1;
+            if (totalSupply() % maxDailyCopies == 0) _resetCost();
+        }
+    }
+
+    function _resetCost() internal {
+        paused = true;
+        cost = baseCost;
+        count = 1;
+    }
+    function _buildBackgroundColors() internal {
+        paused = true;
+        cost = baseCost;
+        count = 1;
+    }
+
+    function _generateOnMint(uint256 _tokenID) internal {
+        uint256 supply = totalSupply();
         imageRand = randMod(randomRange);
         switchPoint = randMod(randomRange);
         durationRand1 = randMod(333);
         durationRand2 = randMod(666);
         durationRand3 = randMod(999);
         rand = randMod(33);
-        attributes[tokenId] = Attr(
+
+        attributes[_tokenID] = Attr(
             uint2str(counter),
-            buildName(tokenId),
+            buildName(supply),
             count,
             rand,
             switchOn,
             switchPoint,
             svgOn,
-            svgToImageURI(getSvg()),
+            svgToImageURI(),
             auctionURI,
             auctionName,
             stagingURI,
             stagingName
         );
-        attributes[tokenId] = Attr(
-            uint2str(counter),
-            buildName(tokenId),
-            count,
-            rand,
-            switchOn,
-            switchPoint,
-            svgOn,
-            svgToImageURI(getSvg()),
-            auctionURI,
-            auctionName,
-            stagingURI,
-            stagingName
-        );
-
-        if (msg.sender != owner()) {
-            require(msg.value >= cost * _mintAmount);
-        }
-
-        if (block.timestamp >= startingTime + auctionDuration) {
-            cost = baseCost;
-            count = 1;
-            paused = true;
-        } else {
-            _safeMint(msg.sender, supply + 1);
-            cost = (cost * costMultiplier) / 10000000000000000;
-            cost = cost * 1000000000000;
-            count = count + 1;
-
-            if (totalSupply() % maxDailyCopies == 0) {
-                paused = true;
-                cost = baseCost;
-                count = 1;
-            }
-        }
     }
 
     function walletOfOwner(address _owner)
@@ -404,22 +372,16 @@ contract Dailys is
         ];
         return bgColors[index];
     }
+
     function backgroundTimer(uint256 index)
         internal
         pure
         returns (string memory)
     {
-        string[7] memory bgTimes = [
-            "s",
-            "s",
-            "s",
-            "s",
-            "m",
-            "m",
-            "h"
-        ];
+        string[7] memory bgTimes = ["s", "s", "s", "s", "m", "m", "h"];
         return bgTimes[index];
     }
+
     function stopOpacityPicker(uint256 index)
         internal
         pure
@@ -439,11 +401,8 @@ contract Dailys is
         ];
         return stopOpacity[index];
     }
-    function svgToImageURI(string memory _svg)
-        public
-        
-        returns (string memory)
-    {
+
+    function svgToImageURI() public view returns (string memory) {
         string memory svg = getSvg();
         string memory baseURL = "data:image/svg+xml;base64,";
         string memory svgBase64Encoded = Base64.encode(
@@ -452,57 +411,202 @@ contract Dailys is
         return string(abi.encodePacked(baseURL, svgBase64Encoded));
     }
 
-    function getSvg() public returns (string memory) {
-//        string memory svg = "<?xml version='1.0' standalone='no'?> <svg xmlns='http://www.w3.org/2000/svg'  xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 24 24'> <defs> <linearGradient id='a' gradientUnits='objectBoundingBox' x1='0' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='.5' stop-color='purple'> <animate attributeName='stop-color' values='purple;blue;green;yellow;orange;red;purple;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='1' stop-color='blue'> <animate attributeName='stop-color' values='blue;green;yellow;orange;red;purple;blue;' dur='200s' repeatCount='indefinite'> </animate> </stop> <animateTransform attributeName='gradientTransform' type='rotate' from='0 .5 .5' to='360 .5 .5' dur='300s' repeatCount='indefinite' /> </linearGradient> <linearGradient id='b' gradientUnits='objectBoundingBox' x1='0' y1='1' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='1' stop-color='purple' stop-opacity='0'> <animate attributeName='stop-color' values='purple;blue;green;yellow;orange;red;purple;' dur='200s' repeatCount='indefinite'> </animate> </stop> <animate Transform='gradientTransform' type='rotate' values='360 .5 .5;0 .5 .5' dur='400s' repeatCount='indefinite' /> </linearGradient> </defs> <rect fill='url(#a)' width='100%' height='100%' /> <rect fill='url(#b)' width='100%' height='100%' /> </svg>";
 
-        string memory svg = buildSvg();
+    function buildColorStops() public view returns (string memory) {
+        //        string memory svg = "<?xml version='1.0' standalone='no'?> <svg xmlns='http://www.w3.org/2000/svg'  xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 24 24'> <defs> <linearGradient id='a' gradientUnits='objectBoundingBox' x1='0' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='.5' stop-color='purple'> <animate attributeName='stop-color' values='purple;blue;green;yellow;orange;red;purple;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='1' stop-color='blue'> <animate attributeName='stop-color' values='blue;green;yellow;orange;red;purple;blue;' dur='200s' repeatCount='indefinite'> </animate> </stop> <animateTransform attributeName='gradientTransform' type='rotate' from='0 .5 .5' to='360 .5 .5' dur='300s' repeatCount='indefinite' /> </linearGradient> <linearGradient id='b' gradientUnits='objectBoundingBox' x1='0' y1='1' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='1' stop-color='purple' stop-opacity='0'> <animate attributeName='stop-color' values='purple;blue;green;yellow;orange;red;purple;' dur='200s' repeatCount='indefinite'> </animate> </stop> <animate Transform='gradientTransform' type='rotate' values='360 .5 .5;0 .5 .5' dur='400s' repeatCount='indefinite' /> </linearGradient> </defs> <rect fill='url(#a)' width='100%' height='100%' /> <rect fill='url(#b)' width='100%' height='100%' /> </svg>";
 
-        return svg;
-    }
-
-    function buildColorStops() public returns (string memory) {
-//        string memory svg = "<?xml version='1.0' standalone='no'?> <svg xmlns='http://www.w3.org/2000/svg'  xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 24 24'> <defs> <linearGradient id='a' gradientUnits='objectBoundingBox' x1='0' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='.5' stop-color='purple'> <animate attributeName='stop-color' values='purple;blue;green;yellow;orange;red;purple;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='1' stop-color='blue'> <animate attributeName='stop-color' values='blue;green;yellow;orange;red;purple;blue;' dur='200s' repeatCount='indefinite'> </animate> </stop> <animateTransform attributeName='gradientTransform' type='rotate' from='0 .5 .5' to='360 .5 .5' dur='300s' repeatCount='indefinite' /> </linearGradient> <linearGradient id='b' gradientUnits='objectBoundingBox' x1='0' y1='1' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='200s' repeatCount='indefinite'> </animate> </stop> <stop offset='1' stop-color='purple' stop-opacity='0'> <animate attributeName='stop-color' values='purple;blue;green;yellow;orange;red;purple;' dur='200s' repeatCount='indefinite'> </animate> </stop> <animate Transform='gradientTransform' type='rotate' values='360 .5 .5;0 .5 .5' dur='400s' repeatCount='indefinite' /> </linearGradient> </defs> <rect fill='url(#a)' width='100%' height='100%' /> <rect fill='url(#b)' width='100%' height='100%' /> </svg>";
-
-        string memory gradient_ColorStop = (string(abi.encodePacked(backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)))));
+        string memory gradient_ColorStop = (
+            string(
+                abi.encodePacked(
+                    backgroundColors(randMod(12)),
+                    ";",
+                    backgroundColors(randMod(12)),
+                    ";",
+                    backgroundColors(randMod(12)),
+                    ";",
+                    backgroundColors(randMod(12)),
+                    ";",
+                    backgroundColors(randMod(12)),
+                    ";",
+                    backgroundColors(randMod(12)),
+                    ";",
+                    backgroundColors(randMod(12)),
+                    ";",
+                    backgroundColors(randMod(12))
+                )
+            )
+        );
 
         return gradient_ColorStop;
     }
-    function buildSvg() public returns (string memory) {
-        uint stopColor1 = randMod(12);
-        uint stopColor2 = randMod(12);
-        uint stopColor3 = randMod(12);
-        uint stopColor4 = randMod(12);
-        uint stopColor5 = randMod(12);
-//        string memory gradient_ColorStop = (string(abi.encodePacked(backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)))));
+    struct stopColors {
+        string stopColor1;
+        string stopColor2;
+        string stopColor3;
+        string stopColor4;
+        string stopColor5;
+    }
+
+    function getSvg() public view returns (string memory) {
+         stopColors memory sC = stopColors(backgroundColors(randMod(12)),backgroundColors(randMod(12)),backgroundColors(randMod(12)),backgroundColors(randMod(12)),backgroundColors(randMod(12)));
+         sC = stopColors(backgroundColors(randMod(12)),backgroundColors(randMod(12)),backgroundColors(randMod(12)),backgroundColors(randMod(12)),backgroundColors(randMod(12)));
+        //        string memory gradient_ColorStop = (string(abi.encodePacked(backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)), ";", backgroundColors(randMod(12)))));
         string memory gradient_ColorStop = buildColorStops();
 
-        string memory header = "<?xml version='1.0' standalone='no'?> <svg xmlns='http://www.w3.org/2000/svg'  xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 24 24'> <defs> ";
-//        string memory gradient1_Stop1Builder = (string(abi.encodePacked("<linearGradient id='a' gradientUnits='objectBoundingBox' x1='0' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='", uint2str(durationRand1), "s' repeatCount='indefinite'> </animate> </stop> ")));
-        string memory gradient1_Stop1Builder = (string(abi.encodePacked("<linearGradient id='a' gradientUnits='objectBoundingBox' x1='1' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='", backgroundColors(stopColor1), "'> <animate attributeName='stop-color' values='", backgroundColors(stopColor1), ";", gradient_ColorStop, ";", backgroundColors(stopColor1), ";' dur='", uint2str(durationRand1), backgroundTimer(randMod(7)), "' repeatCount='indefinite'> </animate> </stop> ")));
-        string memory gradient1_Stop2Builder = (string(abi.encodePacked("<stop offset='.5' stop-color='", backgroundColors(stopColor2), "'> <animate attributeName='stop-color' values='", backgroundColors(stopColor2), ";", gradient_ColorStop, ";", backgroundColors(stopColor2), ";' dur='", uint2str(durationRand1), backgroundTimer(randMod(7)), "' repeatCount='indefinite'> </animate> </stop> ")));
-        string memory gradient1_Stop3Builder = (string(abi.encodePacked("<stop offset='1' stop-color='", backgroundColors(stopColor3), "'> <animate attributeName='stop-color' values='", backgroundColors(stopColor3), ";", gradient_ColorStop, ";", backgroundColors(stopColor3), ";' dur='", uint2str(durationRand1), backgroundTimer(randMod(7)), "' repeatCount='indefinite'> </animate> </stop> ")));
-        string memory gradient1Transform = (string(abi.encodePacked("<animateTransform attributeName='gradientTransform' type='rotate' from='0 .5 .5' to='360 .5 .5' dur='", uint2str(durationRand2), backgroundTimer(randMod(7)), "' repeatCount='indefinite' /> </linearGradient> ")));
-//        string memory gradient2_Stop1Builder = (string(abi.encodePacked("<linearGradient id='b' gradientUnits='objectBoundingBox' x1='1' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='", backgroundColors(stopColor1), "'> <animate attributeName='stop-color' values='", backgroundColors(stopColor1), ";", gradient_ColorStop, ";", backgroundColors(stopColor1), ";' dur='", uint2str(durationRand1), backgroundTimer(randMod(7)), "' repeatCount='indefinite'> </animate> </stop> ")));
-        gradient2_Stop1Builder = (string(abi.encodePacked("<linearGradient id='b' gradientUnits='objectBoundingBox' x1='1' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='", backgroundColors(stopColor4), "'> <animate attributeName='stop-color' values='", backgroundColors(stopColor4), ";", gradient_ColorStop, ";", backgroundColors(stopColor4), ";' dur='", uint2str(durationRand1), backgroundTimer(randMod(7)), "' repeatCount='indefinite'> </animate> </stop> ")));
-        gradient2_Stop2Builder = (string(abi.encodePacked("<stop offset='1' stop-color='", backgroundColors(stopColor5), "' stop-opacity='", stopOpacityPicker(randMod(10)), "'> <animate attributeName='stop-color' values='", backgroundColors(stopColor5), ";", gradient_ColorStop, ";", backgroundColors(stopColor5), ";' dur='", uint2str(durationRand2), backgroundTimer(randMod(7)), "' repeatCount='indefinite'> </animate> </stop> ")));
-        string memory gradient2Transform = (string(abi.encodePacked("<animate Transform='gradientTransform' type='rotate' values='360 .5 .5;0 .5 .5' dur='", uint2str(durationRand3), backgroundTimer(randMod(7)), "' repeatCount='indefinite' /> </linearGradient> </defs> ")));
-        string memory closer = (string(abi.encodePacked("<rect fill='url(#a)' width='100%' height='100%' /> <rect fill='url(#b)' width='100%' height='100%' /> </svg>")));
-        string memory svg = (string(abi.encodePacked(header, gradient1_Stop1Builder, gradient1_Stop2Builder, gradient1_Stop3Builder)));
+        string
+            memory header = "<?xml version='1.0' standalone='no'?> <svg xmlns='http://www.w3.org/2000/svg'  xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 24 24'> <defs> ";
+        //        string memory gradient1_Stop1Builder = (string(abi.encodePacked("<linearGradient id='a' gradientUnits='objectBoundingBox' x1='0' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='red'> <animate attributeName='stop-color' values='red;purple;blue;green;yellow;orange;red;' dur='", uint2str(durationRand1), "s' repeatCount='indefinite'> </animate> </stop> ")));
+        string memory gradient1_Stop1Builder = (
+            string(
+                abi.encodePacked(
+                    "<linearGradient id='a' gradientUnits='objectBoundingBox' x1='1' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='",
+                    sC.stopColor1,
+                    "'> <animate attributeName='stop-color' values='",
+                    sC.stopColor1,
+                    ";",
+                    gradient_ColorStop,
+                    ";",
+                    sC.stopColor1,
+                    ";' dur='",
+                    uint2str(durationRand1),
+                    backgroundTimer(randMod(7)),
+                    "' repeatCount='indefinite'> </animate> </stop> "
+                )
+            )
+        );
+        string memory gradient1_Stop2Builder = (
+            string(
+                abi.encodePacked(
+                    "<stop offset='.5' stop-color='",
+                    sC.stopColor2,
+                    "'> <animate attributeName='stop-color' values='",
+                    sC.stopColor2,
+                    ";",
+                    gradient_ColorStop,
+                    ";",
+                    sC.stopColor2,
+                    ";' dur='",
+                    uint2str(durationRand1),
+                    backgroundTimer(randMod(7)),
+                    "' repeatCount='indefinite'> </animate> </stop> "
+                )
+            )
+        );
+        string memory gradient1_Stop3Builder = (
+            string(
+                abi.encodePacked(
+                    "<stop offset='1' stop-color='",
+                    sC.stopColor3,
+                    "'> <animate attributeName='stop-color' values='",
+                    sC.stopColor3,
+                    ";",
+                    gradient_ColorStop,
+                    ";",
+                    sC.stopColor3,
+                    ";' dur='",
+                    uint2str(durationRand1),
+                    backgroundTimer(randMod(7)),
+                    "' repeatCount='indefinite'> </animate> </stop> "
+                )
+            )
+        );
+        string memory gradient1Transform = (
+            string(
+                abi.encodePacked(
+                    "<animateTransform attributeName='gradientTransform' type='rotate' from='0 .5 .5' to='360 .5 .5' dur='",
+                    uint2str(durationRand2),
+                    backgroundTimer(randMod(7)),
+                    "' repeatCount='indefinite' /> </linearGradient> "
+                )
+            )
+        );
+        //        string memory gradient2_Stop1Builder = (string(abi.encodePacked("<linearGradient id='b' gradientUnits='objectBoundingBox' x1='1' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='", backgroundColors(stopColor1), "'> <animate attributeName='stop-color' values='", backgroundColors(stopColor1), ";", gradient_ColorStop, ";", backgroundColors(stopColor1), ";' dur='", uint2str(durationRand1), backgroundTimer(randMod(7)), "' repeatCount='indefinite'> </animate> </stop> ")));
+        string memory gradient2_Stop1Builder = (
+            string(
+                abi.encodePacked(
+                    "<linearGradient id='b' gradientUnits='objectBoundingBox' x1='1' y1='0' x2='1' y2='1'> <stop offset='0' stop-color='",
+                    sC.stopColor4,
+                    "'> <animate attributeName='stop-color' values='",
+                    sC.stopColor4,
+                    ";",
+                    gradient_ColorStop,
+                    ";",
+                    sC.stopColor4,
+                    ";' dur='",
+                    uint2str(durationRand1),
+                    backgroundTimer(randMod(7)),
+                    "' repeatCount='indefinite'> </animate> </stop> "
+                )
+            )
+        );
+        string memory gradient2_Stop2Builder = (
+            string(
+                abi.encodePacked(
+                    "<stop offset='1' stop-color='",
+                    sC.stopColor5,
+                    "' stop-opacity='",
+                    stopOpacityPicker(randMod(10)),
+                    "'> <animate attributeName='stop-color' values='",
+                    sC.stopColor5,
+                    ";",
+                    gradient_ColorStop,
+                    ";",
+                    sC.stopColor5,
+                    ";' dur='",
+                    uint2str(durationRand2),
+                    backgroundTimer(randMod(7)),
+                    "' repeatCount='indefinite'> </animate> </stop> "
+                )
+            )
+        );
+        string memory gradient2Transform = (
+            string(
+                abi.encodePacked(
+                    "<animate Transform='gradientTransform' type='rotate' values='360 .5 .5;0 .5 .5' dur='",
+                    uint2str(durationRand3),
+                    backgroundTimer(randMod(7)),
+                    "' repeatCount='indefinite' /> </linearGradient> </defs> "
+                )
+            )
+        );
+        string memory closer = (
+            string(
+                abi.encodePacked(
+                    "<rect fill='url(#a)' width='100%' height='100%' /> <rect fill='url(#b)' width='100%' height='100%' /> </svg>"
+                )
+            )
+        );
+        string memory svg = (
+            string(
+                abi.encodePacked(
+                    header,
+                    gradient1_Stop1Builder,
+                    gradient1_Stop2Builder,
+                    gradient1_Stop3Builder
+                )
+            )
+        );
         svg = (string(abi.encodePacked(svg, gradient1Transform)));
-        svg = (string(abi.encodePacked(svg, gradient2_Stop1Builder, gradient2_Stop2Builder)));
+        svg = (
+            string(
+                abi.encodePacked(
+                    svg,
+                    gradient2_Stop1Builder,
+                    gradient2_Stop2Builder
+                )
+            )
+        );
         svg = (string(abi.encodePacked(svg, gradient2Transform)));
         svg = (string(abi.encodePacked(svg, closer)));
-
 
         return svg;
     }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////   tokenURI Function   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////   tokenURI Function   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     function tokenURI(uint256 tokenId)
         public
         view
@@ -551,13 +655,13 @@ contract Dailys is
         );
         return string(abi.encodePacked("data:application/json;base64,", json));
     }
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //only owner 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //only owner
     //set functions
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     function setinterval(uint256 _interval) public onlyOwner {
         interval = _interval;
     }
@@ -573,7 +677,6 @@ contract Dailys is
     function setauctionDuration(uint256 _auctionDuration) public onlyOwner {
         auctionDuration = _auctionDuration;
     }
-
 
     function setCost(uint256 _newCost) public onlyOwner {
         cost = _newCost;
@@ -618,10 +721,6 @@ contract Dailys is
         baseExtension = _newBaseExtension;
     }
 
-
-
-
-
     function reveal() public onlyOwner {
         revealed = true;
     }
@@ -633,6 +732,7 @@ contract Dailys is
     function turn_svgOn(bool _svgSwitch_On) public onlyOwner {
         svgOn = _svgSwitch_On;
     }
+
     function set_switchOn(bool _Set_Switch_On) public onlyOwner {
         switchOn = _Set_Switch_On;
     }
